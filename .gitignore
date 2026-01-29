@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Logs & output
+sorted_files/
+sort_log_*.txt
+
+# Archives / extracted temp
+*.zip
+*.rar
+*.7z
+
+# OS junk
+Thumbs.db
+.DS_Store
