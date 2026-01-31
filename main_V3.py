@@ -247,14 +247,11 @@ if __name__ == "__main__":
     SORTED_ROOT = os.path.normpath(sorted_root)
     LOG_PATH = create_log_file(sorted_root)
 
-    log_message("=== Koikatsu Sort Session ===")
-    log_message(f"Source folder: {source_dir}")
-    log_message(f"Output folder: {sorted_root}")
     print("Please wait, files are being scanned...")
 
     scan_path(source_dir, output_dirs)
 
-    log_message("=== Final Summary ===")
+    log_message("=== Summary ===")
     log_message(f"Total files processed: {COUNTS['TotalFiles']}")
     log_message(f"Character cards: {COUNTS['Character']}")
     log_message(f"Clothing cards: {COUNTS['Clothing']}")
