@@ -143,6 +143,40 @@ def detect_koikatsu_card_type(path):
 
     return card_type
 
+def is_pure_mod_zip(zip_path):
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            top_level = set()
+
+            for name in z.namelist():
+                parts = name.strip("/").split("/", 1)
+                if parts:
+                    top_level.add(parts[0].lower())
+
+            return top_level == {"abdata", "manifest.xml"}
+    except Exception:
+        return False
+    
+def copy_folder_contents(src_dir, dest_dir):
+    os.makedirs(dest_dir, exist_ok=True)
+
+    for item in os.listdir(src_dir):
+        src = os.path.join(src_dir, item)
+        dest = os.path.join(dest_dir, item)
+
+        if os.path.isdir(src):
+            shutil.copytree(src, dest, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dest)
+
+def find_bepinex_dir(root):
+    for entry in os.listdir(root):
+        if entry.lower() == "bepinex":
+            full = os.path.join(root, entry)
+            if os.path.isdir(full):
+                return full
+    return None
+
 
 # ==================================================
 # ARCHIVE EXTRACTION
@@ -167,19 +201,40 @@ def extract_archive(path, temp_dir):
 # ==================================================
 
 def scan_path(path, output_dirs):
-    if os.path.normpath(path).startswith(SORTED_ROOT):
+    norm = os.path.normpath(path)
+    if norm.startswith(SORTED_ROOT):
         return
-    
+
+    # ---------------------------
+    # DIRECTORY HANDLING
+    # ---------------------------
     if os.path.isdir(path):
-        for root, _, files in os.walk(path):
-            for f in files:
-                scan_path(os.path.join(root, f), output_dirs)
+        try:
+            entries = os.listdir(path)
+        except Exception:
+            return
+
+        # Detect BepInEx folder at this level
+        for entry in entries:
+            if entry.lower() == "bepinex":
+                src = os.path.join(path, entry)
+                if os.path.isdir(src):
+                    dest = unique_path(SORTED_ROOT, "BepInEx")
+                    shutil.copytree(src, dest)
+                    COUNTS["TotalFiles"] += 1
+                    return  # stop scanning this branch
+
+        # Recurse normally
+        for entry in entries:
+            scan_path(os.path.join(path, entry), output_dirs)
         return
 
     lower = path.lower()
     filename = os.path.basename(path)
 
-    # ---- ZIPMOD ----
+    # ---------------------------
+    # ZIPMOD
+    # ---------------------------
     if lower.endswith(".zipmod"):
         dest = unique_path(output_dirs["Mod"], filename)
         shutil.copy2(path, dest)
@@ -187,20 +242,51 @@ def scan_path(path, output_dirs):
         COUNTS["TotalFiles"] += 1
         return
 
-    # ---- ARCHIVES ----
+    # ---------------------------
+    # ARCHIVES (zip / 7z / rar)
+    # ---------------------------
     if lower.endswith((".zip", ".7z", ".rar")):
         COUNTS["Archives"] += 1
+
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 extract_archive(path, tmp)
+
+                # Detect BepInEx folder inside archive
+                for entry in os.listdir(tmp):
+                    if entry.lower() == "bepinex":
+                        src = os.path.join(tmp, entry)
+                        if os.path.isdir(src):
+                            dest = unique_path(SORTED_ROOT, "BepInEx")
+                            shutil.copytree(src, dest)
+                            COUNTS["TotalFiles"] += 1
+                            return
+
+                # Pure mod ZIP rule
+                if lower.endswith(".zip") and is_pure_mod_zip(path):
+                    mod_name = os.path.splitext(filename)[0]
+                    dest_dir = unique_path(output_dirs["Mod"], mod_name)
+
+                    with zipfile.ZipFile(path) as z:
+                        z.extractall(dest_dir)
+
+                    COUNTS["Mod"] += 1
+                    COUNTS["TotalFiles"] += 1
+                    return
+
+                # Normal archive scan
                 scan_path(tmp, output_dirs)
+
             except Exception:
                 dest = unique_path(output_dirs["Extra"], filename)
                 shutil.copy2(path, dest)
                 COUNTS["Errors"] += 1
+
         return
 
-    # ---- PNG CARD ----
+    # ---------------------------
+    # PNG CARD
+    # ---------------------------
     if lower.endswith(".png"):
         card_type = detect_koikatsu_card_type(path)
 
@@ -215,11 +301,14 @@ def scan_path(path, output_dirs):
 
         dest = unique_path(dest_dir, filename)
         shutil.copy2(path, dest)
+
         COUNTS[card_type] += 1
         COUNTS["TotalFiles"] += 1
         return
 
-    # ---- EVERYTHING ELSE ----
+    # ---------------------------
+    # EVERYTHING ELSE
+    # ---------------------------
     dest = unique_path(output_dirs["Extra"], filename)
     shutil.copy2(path, dest)
     COUNTS["Extra"] += 1
