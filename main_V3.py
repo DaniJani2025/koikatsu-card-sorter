@@ -16,6 +16,7 @@ COUNTS = {
     "Extra": 0,
     "Archives": 0,
     "Errors": 0,
+    "Unknown": 0,
     "TotalFiles": 0
 }
 
